@@ -1,3 +1,12 @@
+# Trabalho 2: Gerenciamento de Memória com Paginação
+
+### Membros:
+- Guilherme Cabral Schlickmann (22104160)
+- Joao Pedro Paixao de Matos Gubert (22203242)
+- Railan Gomes de Abreu (22201641)
+
+
+
 ## Como Executar
 
 1. Na pasta `T2`, abra o terminal integrado.
