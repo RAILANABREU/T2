@@ -1,173 +1,174 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
-#define TAMANHO_MEMORIA_FISICA 512
-#define TAMANHO_PAGINA 32
-#define TAMANHO_MAXIMO_PROCESSO 64
-
-typedef struct
-{
-    int quadro;
-} EntradaTabelaPagina;
-
-typedef struct
-{
+// Estrutura para representar um processo
+typedef struct Processo {
     int id;
     int tamanho;
-    EntradaTabelaPagina *tabelaPaginas;
+    int *tabela_paginas;
+    struct Processo *prox;
 } Processo;
 
-unsigned char memoriaFisica[TAMANHO_MEMORIA_FISICA];
-int quadrosLivres[TAMANHO_MEMORIA_FISICA / TAMANHO_PAGINA];
-int numQuadrosLivres = TAMANHO_MEMORIA_FISICA / TAMANHO_PAGINA;
+// Estrutura para a tabela que armazenará os processos
+typedef struct {
+    Processo *cabeca;
+} TabelaProcessos;
 
-Processo *processos[10]; // Array para armazenar processos
-int numProcessos = 0;
+int tamanho_memoria_fisica;
+int tamanho_pagina;
+int tamanho_max_processo;
+int *memoria_fisica;
+int *quadros_livres;
+TabelaProcessos tabela_processos;
 
-void inicializarMemoriaFisica()
-{
-    for (int i = 0; i < TAMANHO_MEMORIA_FISICA; i++)
-    {
-        memoriaFisica[i] = 0;
-    }
-    for (int i = 0; i < TAMANHO_MEMORIA_FISICA / TAMANHO_PAGINA; i++)
-    {
-        quadrosLivres[i] = 1;
-    }
+// Função para verificar se um número é potência de 2
+int is_power_of_two(int x) {
+    return (x > 0) && ((x & (x - 1)) == 0);
 }
 
-void visualizarMemoria()
-{
-    printf("Memória Física:\n");
-    for (int i = 0; i < TAMANHO_MEMORIA_FISICA; i++)
-    {
-        printf("%02x ", memoriaFisica[i]);
-        if ((i + 1) % 16 == 0)
-        {
+void inicializar_memoria() {
+    for (int i = 0; i < tamanho_memoria_fisica / tamanho_pagina; i++) {
+        quadros_livres[i] = 1; // 1 indica quadro livre
+    }
+    tabela_processos.cabeca = NULL;
+}
+
+void visualizar_memoria() {
+    int memoria_livre = 0;
+    for (int i = 0; i < tamanho_memoria_fisica / tamanho_pagina; i++) {
+        if (quadros_livres[i] == 1) {
+            memoria_livre++;
+        }
+    }
+    printf("Memória livre: %.2f%%\n", (memoria_livre / (float)(tamanho_memoria_fisica / tamanho_pagina)) * 100);
+    for (int i = 0; i < tamanho_memoria_fisica; i++) {
+        printf("%02X ", memoria_fisica[i]);
+        if ((i + 1) % tamanho_pagina == 0) {
             printf("\n");
         }
     }
-    printf("\nPercentual de memória livre: %.2f%%\n", (float)numQuadrosLivres / (TAMANHO_MEMORIA_FISICA / TAMANHO_PAGINA) * 100);
 }
 
-Processo *criarProcesso(int id, int tamanho)
-{
-    if (tamanho > TAMANHO_MAXIMO_PROCESSO)
-    {
-        printf("Tamanho do processo excede o tamanho máximo permitido.\n");
-        return NULL;
+void criar_processo(int id, int tamanho) {
+    if (tamanho > tamanho_max_processo) {
+        printf("Erro: Tamanho do processo excede o tamanho máximo configurado.\n");
+        return;
     }
 
-    int numPaginas = (tamanho + TAMANHO_PAGINA - 1) / TAMANHO_PAGINA;
+    int paginas_necessarias = (tamanho + tamanho_pagina - 1) / tamanho_pagina;
+    int paginas_alocadas = 0;
 
-    if (numPaginas > numQuadrosLivres)
-    {
-        printf("Memória insuficiente para alocar o processo.\n");
-        return NULL;
-    }
+    Processo *novo_processo = (Processo *)malloc(sizeof(Processo));
+    novo_processo->id = id;
+    novo_processo->tamanho = tamanho;
+    novo_processo->tabela_paginas = (int *)malloc(paginas_necessarias * sizeof(int));
+    novo_processo->prox = NULL;
 
-    Processo *processo = (Processo *)malloc(sizeof(Processo));
-    processo->id = id;
-    processo->tamanho = tamanho;
-    processo->tabelaPaginas = (EntradaTabelaPagina *)malloc(numPaginas * sizeof(EntradaTabelaPagina));
-
-    srand(time(NULL));
-    for (int i = 0; i < numPaginas; i++)
-    {
-        int quadro = -1;
-        for (int j = 0; j < TAMANHO_MEMORIA_FISICA / TAMANHO_PAGINA; j++)
-        {
-            if (quadrosLivres[j])
-            {
-                quadro = j;
-                quadrosLivres[j] = 0;
-                numQuadrosLivres--;
-                break;
+    while (paginas_alocadas < paginas_necessarias) {
+        int quadro = rand() % (tamanho_memoria_fisica / tamanho_pagina);
+        if (quadros_livres[quadro] == 1) {
+            quadros_livres[quadro] = 0;
+            novo_processo->tabela_paginas[paginas_alocadas++] = quadro;
+            for (int j = 0; j < tamanho_pagina; j++) {
+                memoria_fisica[quadro * tamanho_pagina + j] = rand() % 256;
             }
         }
-        if (quadro == -1)
-        {
-            printf("Erro: não há quadros livres suficientes.\n");
-            free(processo->tabelaPaginas);
-            free(processo);
-            return NULL;
-        }
-
-        processo->tabelaPaginas[i].quadro = quadro;
-
-        for (int k = 0; k < TAMANHO_PAGINA && (i * TAMANHO_PAGINA + k) < tamanho; k++)
-        {
-            memoriaFisica[quadro * TAMANHO_PAGINA + k] = rand() % 256;
-        }
     }
 
-    processos[numProcessos++] = processo;
-    return processo;
+    if (paginas_alocadas < paginas_necessarias) {
+        printf("Erro: Memória insuficiente para alocar o processo.\n");
+        free(novo_processo->tabela_paginas);
+        free(novo_processo);
+        return;
+    }
+
+    // Adiciona o novo processo à tabela de processos
+    novo_processo->prox = tabela_processos.cabeca;
+    tabela_processos.cabeca = novo_processo;
+
+    printf("Processo %d criado com sucesso.\n", id);
 }
 
-void visualizarTabelaPaginas(int id)
-{
-    for (int i = 0; i < numProcessos; i++)
-    {
-        if (processos[i]->id == id)
-        {
-            Processo *processo = processos[i];
-            printf("Tabela de Páginas do Processo %d:\n", processo->id);
-            printf("Tamanho: %d bytes\n", processo->tamanho);
-            int numPaginas = (processo->tamanho + TAMANHO_PAGINA - 1) / TAMANHO_PAGINA;
-            for (int j = 0; j < numPaginas; j++)
-            {
-                printf("Página %d -> Quadro %d\n", j, processo->tabelaPaginas[j].quadro);
+void visualizar_tabela_paginas(int id) {
+    Processo *atual = tabela_processos.cabeca;
+    while (atual != NULL) {
+        if (atual->id == id) {
+            printf("Tamanho do processo: %d bytes\n", atual->tamanho);
+            printf("Tabela de páginas:\n");
+            for (int i = 0; i < (atual->tamanho + tamanho_pagina - 1) / tamanho_pagina; i++) {
+                printf("Página %d -> Quadro %d\n", i, atual->tabela_paginas[i]);
             }
             return;
         }
+        atual = atual->prox;
     }
-    printf("Processo com ID %d não encontrado.\n", id);
+    printf("Erro: Processo não encontrado.\n");
 }
 
-int main()
-{
-    inicializarMemoriaFisica();
+int main() {
+    srand(time(NULL));
 
-    while (1)
-    {
-        printf("\n1. Visualizar memória\n2. Criar processo\n3. Visualizar tabela de páginas\n4. Sair\nEscolha uma opção: ");
+    printf("Digite o tamanho da memória física (em bytes): ");
+    scanf("%d", &tamanho_memoria_fisica);
+    if (!is_power_of_two(tamanho_memoria_fisica)) {
+        printf("Erro: O tamanho da memória física deve ser uma potência de 2.\n");
+        return 1;
+    }
+
+    printf("Digite o tamanho da página (em bytes): ");
+    scanf("%d", &tamanho_pagina);
+    if (!is_power_of_two(tamanho_pagina)) {
+        printf("Erro: O tamanho da página deve ser uma potência de 2.\n");
+        return 1;
+    }
+
+    printf("Digite o tamanho máximo de um processo (em bytes): ");
+    scanf("%d", &tamanho_max_processo);
+    if (!is_power_of_two(tamanho_max_processo)) {
+        printf("Erro: O tamanho máximo de um processo deve ser uma potência de 2.\n");
+        return 1;
+    }
+
+    memoria_fisica = (int *)malloc(tamanho_memoria_fisica * sizeof(int));
+    quadros_livres = (int *)malloc((tamanho_memoria_fisica / tamanho_pagina) * sizeof(int));
+    inicializar_memoria();
+
+    while (1) {
         int opcao;
+        printf("\n1. Visualizar memória\n2. Criar processo\n3. Visualizar tabela de páginas\n4. Sair\nEscolha uma opção: ");
         scanf("%d", &opcao);
 
-        if (opcao == 1)
-        {
-            visualizarMemoria();
-        }
-        else if (opcao == 2)
-        {
+        if (opcao == 1) {
+            visualizar_memoria();
+        } else if (opcao == 2) {
             int id, tamanho;
-            printf("Informe o ID do processo: ");
+            printf("Digite o ID do processo: ");
             scanf("%d", &id);
-            printf("Informe o tamanho do processo (em bytes): ");
+            printf("Digite o tamanho do processo (em bytes): ");
             scanf("%d", &tamanho);
-            Processo *processo = criarProcesso(id, tamanho);
-            if (processo != NULL)
-            {
-                printf("Processo criado com sucesso!\n");
-            }
-        }
-        else if (opcao == 3)
-        {
+            criar_processo(id, tamanho);
+        } else if (opcao == 3) {
             int id;
-            printf("Informe o ID do processo: ");
+            printf("Digite o ID do processo: ");
             scanf("%d", &id);
-            visualizarTabelaPaginas(id);
-        }
-        else if (opcao == 4)
-        {
+            visualizar_tabela_paginas(id);
+        } else if (opcao == 4) {
             break;
+        } else {
+            printf("Opção inválida.\n");
         }
-        else
-        {
-            printf("Opção inválida!\n");
-        }
+    }
+
+    free(memoria_fisica);
+    free(quadros_livres);
+    Processo *atual = tabela_processos.cabeca;
+    while (atual != NULL) {
+        Processo *temp = atual;
+        atual = atual->prox;
+        free(temp->tabela_paginas);
+        free(temp);
     }
 
     return 0;
