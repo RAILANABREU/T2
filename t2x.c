@@ -35,22 +35,23 @@ void inicializar_memoria()
 {
     for (int i = 0; i < tamanho_memoria_fisica / tamanho_pagina; i++)
     {
-        quadros_livres[i] = 1; // 1 indica quadro livre
+        quadros_livres[i] = tamanho_pagina; // Inicializa com o tamanho da página indicando espaço livre
     }
     tabela_processos.cabeca = NULL;
+    memset(memoria_fisica, 0, tamanho_memoria_fisica * sizeof(int)); // Inicializa a memória física com zeros
 }
 
 void visualizar_memoria()
 {
     int memoria_livre = 0;
-    for (int i = 0; i < tamanho_memoria_fisica / tamanho_pagina; i++)
+    for (int i = 0; i < tamanho_memoria_fisica; i++)
     {
-        if (quadros_livres[i] == 1)
+        if (memoria_fisica[i] == 0)
         {
             memoria_livre++;
         }
     }
-    printf("Memória livre: %.2f%%\n", (memoria_livre / (float)(tamanho_memoria_fisica / tamanho_pagina)) * 100);
+    printf("Memória livre: %.2f%%\n", (memoria_livre / (float)tamanho_memoria_fisica) * 100);
     for (int i = 0; i < tamanho_memoria_fisica; i++)
     {
         printf("%02X ", memoria_fisica[i]);
@@ -70,41 +71,55 @@ int criar_processo(int id, int tamanho)
     }
 
     int paginas_necessarias = (tamanho + tamanho_pagina - 1) / tamanho_pagina;
-    int paginas_alocadas = 0;
     int quadros_disponiveis = 0;
+    int memoria_total_disponivel = 0;
 
     for (int i = 0; i < tamanho_memoria_fisica / tamanho_pagina; i++)
     {
-        if (quadros_livres[i] == 1)
+        if (quadros_livres[i] > 0)
         {
             quadros_disponiveis++;
+            memoria_total_disponivel += quadros_livres[i];
         }
     }
 
-    if (quadros_disponiveis < paginas_necessarias)
+    if (quadros_disponiveis < paginas_necessarias || memoria_total_disponivel < tamanho)
     {
         printf("Erro: Memória insuficiente para alocar o processo.\n");
         return 0;
     }
 
     Processo *novo_processo = (Processo *)malloc(sizeof(Processo));
+    if (!novo_processo)
+    {
+        printf("Erro: Falha ao alocar memória para o processo.\n");
+        return 0;
+    }
     novo_processo->id = id;
     novo_processo->tamanho = tamanho;
     novo_processo->tabela_paginas = (int *)malloc(paginas_necessarias * sizeof(int));
+    if (!novo_processo->tabela_paginas)
+    {
+        free(novo_processo);
+        printf("Erro: Falha ao alocar memória para a tabela de páginas do processo.\n");
+        return 0;
+    }
     novo_processo->prox = NULL;
 
-    while (paginas_alocadas < paginas_necessarias)
+    int paginas_alocadas = 0;
+
+    while (tamanho > 0)
     {
         int quadro = rand() % (tamanho_memoria_fisica / tamanho_pagina);
-        if (quadros_livres[quadro] == 1)
+        if (quadros_livres[quadro] > 0)
         {
-            quadros_livres[quadro] = 0;
             novo_processo->tabela_paginas[paginas_alocadas++] = quadro;
-            int bytes_a_escrever = (tamanho > tamanho_pagina) ? tamanho_pagina : tamanho;
+            int bytes_a_escrever = (tamanho > quadros_livres[quadro]) ? quadros_livres[quadro] : tamanho;
             for (int j = 0; j < bytes_a_escrever; j++)
             {
-                memoria_fisica[quadro * tamanho_pagina + j] = rand() % 256;
+                memoria_fisica[quadro * tamanho_pagina + (tamanho_pagina - quadros_livres[quadro] + j)] = rand() % 256;
             }
+            quadros_livres[quadro] -= bytes_a_escrever;
             tamanho -= bytes_a_escrever;
         }
     }
@@ -148,35 +163,67 @@ int main()
 {
     srand(time(NULL));
 
-    printf("Digite o tamanho da memória física (em bytes): ");
-    scanf("%d", &tamanho_memoria_fisica);
-    limpar_buffer();
-    if (!multiplo_de_dois(tamanho_memoria_fisica))
+    // Solicitar tamanho da memória física
+    while (1)
     {
-        printf("Erro: O tamanho da memória física deve ser uma potência de 2.\n");
-        return 1;
+        printf("Digite o tamanho da memória física (em bytes): ");
+        scanf("%d", &tamanho_memoria_fisica);
+        limpar_buffer();
+        if (multiplo_de_dois(tamanho_memoria_fisica))
+        {
+            break;
+        }
+        else
+        {
+            printf("Erro: O tamanho da memória física deve ser uma potência de 2.\n");
+        }
     }
 
-    printf("Digite o tamanho da página (em bytes): ");
-    scanf("%d", &tamanho_pagina);
-    limpar_buffer();
-    if (!multiplo_de_dois(tamanho_pagina))
+    // Solicitar tamanho da página
+    while (1)
     {
-        printf("Erro: O tamanho da página deve ser uma potência de 2.\n");
-        return 1;
+        printf("Digite o tamanho da página (em bytes): ");
+        scanf("%d", &tamanho_pagina);
+        limpar_buffer();
+        if (multiplo_de_dois(tamanho_pagina))
+        {
+            break;
+        }
+        else
+        {
+            printf("Erro: O tamanho da página deve ser uma potência de 2.\n");
+        }
     }
 
-    printf("Digite o tamanho máximo de um processo (em bytes): ");
-    scanf("%d", &tamanho_max_processo);
-    limpar_buffer();
-    if (!multiplo_de_dois(tamanho_max_processo))
+    // Solicitar tamanho máximo de um processo
+    while (1)
     {
-        printf("Erro: O tamanho máximo de um processo deve ser uma potência de 2.\n");
-        return 1;
+        printf("Digite o tamanho máximo de um processo (em bytes): ");
+        scanf("%d", &tamanho_max_processo);
+        limpar_buffer();
+        if (multiplo_de_dois(tamanho_max_processo))
+        {
+            break;
+        }
+        else
+        {
+            printf("Erro: O tamanho máximo de um processo deve ser uma potência de 2.\n");
+        }
     }
 
     memoria_fisica = (int *)malloc(tamanho_memoria_fisica * sizeof(int));
+    if (!memoria_fisica)
+    {
+        printf("Erro: Falha ao alocar memória física.\n");
+        return 1;
+    }
     quadros_livres = (int *)malloc((tamanho_memoria_fisica / tamanho_pagina) * sizeof(int));
+    if (!quadros_livres)
+    {
+        free(memoria_fisica);
+        printf("Erro: Falha ao alocar quadros livres.\n");
+        return 1;
+    }
     inicializar_memoria();
 
     while (1)
